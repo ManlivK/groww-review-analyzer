@@ -183,3 +183,17 @@ AI-generated classifications and recommendations may require human review. Fee i
 ---
 
 **Built with Python, n8n, Google Gemini, and MCP.**
+
+## Workflow Screenshots
+
+### 1. Complete n8n Workflow
+![Workflow Overview](screenshots/workflow-overview.png)
+
+### 2. Review Processing and AI Classification
+![Review Processing](screenshots/review-processing-classification.png)
+
+### 3. Reporting and Fact-Checking
+![Reporting Workflow](screenshots/reporting-fact-checking-and-mcp.png)
+
+### 4. MCP Server Architecture
+![MCP Server](screenshots/mcp-server-architecture.png)
