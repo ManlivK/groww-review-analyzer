@@ -1,0 +1,123 @@
+{
+  "name": "Groww Review Pulse - MCP Server (Public Template)",
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "bearerAuth",
+        "path": "groww-review-pulse-mcp-server"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        -320,
+        -128
+      ],
+      "id": "790c50c2-dbd8-4798-bb5b-822aebbe3df5",
+      "name": "MCP Server Trigger"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Read the existing Weekly Log Google Doc to check for duplicate weekly report entries and verify published content. Read-only operation.",
+        "operation": "get",
+        "documentURL": "https://docs.google.com/document/d/REPLACE_WITH_YOUR_GOOGLE_DOC_ID/edit"
+      },
+      "type": "n8n-nodes-base.googleDocsTool",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        96
+      ],
+      "id": "b7a3de59-d8fb-4db1-bde9-f580ee2be83f",
+      "name": "read_doc"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Append an approved weekly Groww Review Pulse report to the fixed Weekly Log Google Doc. Only append content after human approval.",
+        "operation": "update",
+        "documentURL": "https://docs.google.com/document/d/REPLACE_WITH_YOUR_GOOGLE_DOC_ID/edit",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ $fromAI('text', 'The approved weekly Groww Review Pulse report content to append to the document') }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocsTool",
+      "typeVersion": 2,
+      "position": [
+        -48,
+        96
+      ],
+      "id": "b2b3eede-8ce4-41b7-ade2-d4df1075c40a",
+      "name": "append_to_doc"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Create a Gmail draft containing the approved Groww Weekly Product Pulse. Save as a draft only. Never send the email.",
+        "resource": "draft",
+        "subject": "={{ $fromAI('subject', 'Email subject') }}",
+        "emailType": "html",
+        "message": "={{ $fromAI('body', 'HTML email body for the approved weekly report') }}",
+        "options": {
+          "sendTo": "REPLACE_WITH_YOUR_EMAIL@example.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        48
+      ],
+      "id": "34240ad4-c323-493a-bc0f-14ecf719d742",
+      "name": "create_email_draft"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "read_doc": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "append_to_doc": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "create_email_draft": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
