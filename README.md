@@ -187,10 +187,10 @@ AI-generated classifications and recommendations may require human review. Fee i
 ## Workflow Screenshots
 
 ### 1. Complete n8n Workflow
-![Workflow Overview](screenshots/workflow-overview.png)
+![Workflow Overview](screenshots/workflow-overview.png.)
 
 ### 2. Review Processing and AI Classification
-![Review Processing](screenshots/review-processing-classification.png)
+![Review Processing](screenshots/review-processing-classification.png.png)
 
 ### 3. Reporting and Fact-Checking
 ![Reporting Workflow](screenshots/reporting-fact-checking-and-mcp.png)
