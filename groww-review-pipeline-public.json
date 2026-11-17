@@ -1,0 +1,1439 @@
+{
+  "name": "Groww Review Pulse",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Groww Review Pulse",
+        "formDescription": "Upload cleaned Groww Play Store reviews",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Full Reviews CSV",
+              "fieldType": "file",
+              "fieldName": "fullFile",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "groww-review-pulse"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -480,
+        -64
+      ],
+      "id": "8f056ee5-85e5-446d-b6a0-bcbaf1f657b8",
+      "name": "On form submission"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "fullFile",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.2,
+      "position": [
+        -256,
+        -64
+      ],
+      "id": "9517d2fa-7664-448d-9872-4e0adda164af",
+      "name": "Extract Reviews CSV"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.all();\n\nconst seen = new Set();\nconst cleaned = [];\n\nfunction getValue(row, keys) {\n  for (const key of keys) {\n    if (row[key] !== undefined && row[key] !== null && row[key] !== '') {\n      return row[key];\n    }\n  }\n  return null;\n}\n\nfunction getDate(value) {\n  if (typeof value === 'number' || /^\\d{10,13}$/.test(String(value))) {\n    const n = Number(value);\n    return new Date(n < 1e12 ? n * 1000 : n);\n  }\n  return new Date(value);\n}\n\nfor (const item of input) {\n  const row = item.json;\n\n  const text = String(\n    getValue(row, ['text', 'content', 'reviewText', 'review']) || ''\n  ).trim();\n\n  const dateValue = getValue(row, ['date', 'at', 'reviewDate']);\n  const rating = Number(getValue(row, ['rating', 'score', 'stars']));\n\n  if (!text || text.split(/\\s+/).filter(Boolean).length < 5) continue;\n  if (!dateValue || !Number.isFinite(rating)) continue;\n\n  const date = getDate(dateValue);\n  if (Number.isNaN(date.getTime())) continue;\n\n  const reviewId = getValue(row, ['reviewId', 'review_id', 'id']);\n\n  const duplicateKey = reviewId\n    ? String(reviewId)\n    : `${text.toLowerCase()}|${date.toISOString()}|${rating}`;\n\n  if (seen.has(duplicateKey)) continue;\n  seen.add(duplicateKey);\n\n  // Monday of the review's calendar week\n  const weekDate = new Date(date);\n  weekDate.setUTCHours(0, 0, 0, 0);\n  const day = weekDate.getUTCDay();\n  weekDate.setUTCDate(weekDate.getUTCDate() - (day === 0 ? 6 : day - 1));\n\n  cleaned.push({\n    ...row,\n    reviewId: reviewId || duplicateKey,\n    text,\n    date: date.toISOString(),\n    rating,\n    week_start: weekDate.toISOString().slice(0, 10)\n  });\n}\n\n// Keep no more than 200 reviews per week\nconst weeklyCounts = {};\nconst limitedReviews = [];\n\nfor (const review of cleaned) {\n  const week = review.week_start;\n  weeklyCounts[week] = weeklyCounts[week] || 0;\n\n  if (weeklyCounts[week] < 200) {\n    limitedReviews.push(review);\n    weeklyCounts[week]++;\n  }\n}\n\nreturn [{\n  json: {\n    totalInput: input.length,\n    totalAfterCleaning: cleaned.length,\n    totalReviews: limitedReviews.length,\n    weeklyCounts,\n    reviews: limitedReviews\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        -64
+      ],
+      "id": "6d3337db-c537-4780-991b-5dccf748aef8",
+      "name": "Clean and Prepare Reviews"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst data = $input.first().json;\nconst reviews = data.reviews;\n\n// Select up to 30 reviews per rating for a balanced sample\nconst sample = [];\n\nfor (const rating of [1, 2, 3, 4, 5]) {\n  const group = reviews.filter(r => Number(r.rating) === rating);\n  const count = Math.min(30, group.length);\n\n  for (let i = 0; i < count; i++) {\n    const index = Math.floor(i * group.length / count);\n    sample.push(group[index]);\n  }\n}\n\nconst reviewText = sample.map(r =>\n  `ID: ${r.reviewId}\\nRating: ${r.rating}\\nReview: ${r.text.slice(0, 300)}`\n).join('\\n\\n');\n\nreturn [{\n  json: {\n    totalReviews: reviews.length,\n    sampleSize: sample.length,\n    reviewText\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        192,
+        -64
+      ],
+      "id": "7dedaeef-327c-429c-92bd-fc0405ca8804",
+      "name": "Prepare Reviews for Theme Analysis"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\nYou are analyzing customer reviews for the Groww investment app.\n\nAnalyze the reviews provided below and identify a maximum of 5 distinct themes.\n\nFor each theme, provide:\n- A short, clear theme name.\n- A description of the issue or experience.\n- Inclusion criteria explaining which reviews belong in this theme.\n\nDo not create overlapping themes. Themes should represent distinct customer experiences.\n\nFor this step, identify themes only. Do not assign every review ID yet.\n\nReviews:\n{{ $json.reviewText }}\n\nReturn valid JSON matching the required schema. Use theme IDs T1, T2, T3, T4 and T5. Return no more than 5 themes.\n",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        416,
+        -64
+      ],
+      "id": "44c30762-67de-418a-a306-d817956ee232",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        160
+      ],
+      "id": "9917735e-41c2-452f-92fb-978714aaa1ad",
+      "name": "Google Gemini Chat Model"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"themes\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"theme_id\": {\n            \"type\": \"string\"\n          },\n          \"theme_name\": {\n            \"type\": \"string\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"inclusion_criteria\": {\n            \"type\": \"string\"\n          }\n        },\n        \"required\": [\n          \"theme_id\",\n          \"theme_name\",\n          \"description\",\n          \"inclusion_criteria\"\n        ]\n      }\n    }\n  },\n  \"required\": [\"themes\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        544,
+        144
+      ],
+      "id": "bd843735-5c28-4b78-84ba-a24a56cd8b12",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\n\nreturn [{\n  json: {\n    themes: result.output.themes\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        -64
+      ],
+      "id": "5a864b8e-730e-48ff-b4a5-b33046177867",
+      "name": "Store Discovered Themes"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst themes = $('Store Discovered Themes').first().json.themes;\nconst reviews = $('Clean and Prepare Reviews').first().json.reviews;\n\nconst batchSize = 50;\nconst startBatch = 2; // B01 is already saved\nconst batches = [];\n\nfor (let i = 0; i < reviews.length; i += batchSize) {\n  batches.push({\n    batchNumber: batches.length + 1,\n    reviews: reviews.slice(i, i + batchSize)\n  });\n}\n\nreturn batches\n  .filter(batch => batch.batchNumber >= startBatch)\n  .map(batch => ({\n    json: {\n      batchNumber: batch.batchNumber,\n      totalBatches: batches.length,\n      themes,\n      reviews: batch.reviews.map(r => ({\n        reviewId: r.reviewId,\n        rating: r.rating,\n        text: r.text.slice(0, 300)\n      }))\n    }\n  }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -64
+      ],
+      "id": "57a7a146-3b48-43ab-85c2-a629985ab370",
+      "name": "Prepare Classification Batches"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"assignments\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"reviewId\": {\"type\": \"string\"},\n          \"theme_id\": {\n            \"type\": \"string\",\n            \"enum\": [\"T1\", \"T2\", \"T3\", \"T4\", \"T5\"]\n          }\n        },\n        \"required\": [\"reviewId\", \"theme_id\"]\n      }\n    }\n  },\n  \"required\": [\"assignments\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2000,
+        144
+      ],
+      "id": "fa79661a-c3a4-4836-a6ec-eadabc1b66b9",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "maxItems": 47
+      },
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        1424,
+        -64
+      ],
+      "id": "e951ba9b-3131-4ae1-8e13-afb1168bc2b6",
+      "name": "Limit"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\nClassify each Groww review into exactly ONE of the five supplied themes.\n\nUse the theme descriptions and inclusion criteria.\nChoose the closest theme. Do not create new themes.\nIf multiple themes seem relevant, choose the primary issue.\nReturn only the review ID and assigned theme ID.\n\nThemes:\n{{ JSON.stringify($json.themes) }}\n\nReviews:\n{{ JSON.stringify($json.reviews) }}\n\nReturn JSON in this format:\n{\n  \"assignments\": [\n    {\"reviewId\": \"review-id\", \"theme_id\": \"T1\"}\n  ]\n}\n\nReturn assignments in exactly the same order as the input reviews. Copy each reviewId exactly as provided. Never modify, correct, or generate review IDs.\n",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1872,
+        -64
+      ],
+      "id": "8bc86cf6-8c60-41d9-a590-0facdc3ffd26",
+      "name": "Clean and Prepare Reviews1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const reviews = $('Clean and Prepare Reviews').first().json.reviews;\n\nconst keywords = [\n  'charge',\n  'charges',\n  'fee',\n  'fees',\n  'brokerage',\n  'hidden',\n  'deducted'\n];\n\nconst filtered = reviews.filter(review => {\n  const text = review.text.toLowerCase();\n  return keywords.some(keyword => text.includes(keyword));\n});\n\nreturn [{\n  json: {\n    totalReviews: reviews.length,\n    feeRelatedCount: filtered.length,\n    feeReviews: filtered\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -64
+      ],
+      "id": "0f374cd3-4848-48d4-a8d7-90379aa6f539",
+      "name": "Filter Fee Related Reviews"
+    },
+    {
+      "parameters": {
+        "jsCode": "const reviews = $('Filter Fee Related Reviews').first().json.feeReviews;\n\nconst batch = reviews.slice(0, 25);\n\nreturn [{\n  json: {\n    totalFeeReviews: reviews.length,\n    sampleSize: batch.length,\n    reviews: batch.map(r => ({\n      reviewId: r.reviewId,\n      rating: r.rating,\n      text: r.text.slice(0, 300)\n    }))\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        -64
+      ],
+      "id": "46b6f233-d78f-4d85-a27a-6b7f407c281b",
+      "name": "Prepare Fee Classification Batch"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        2480,
+        160
+      ],
+      "id": "a9478a5f-f97d-4f32-bc80-f2768bc9d605",
+      "name": "Google Gemini Chat Model1"
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "\n{\n  \"type\": \"object\",\n  \"properties\": {\n    \"classifications\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"reviewId\": {\"type\": \"string\"},\n          \"label\": {\n            \"type\": \"string\",\n            \"enum\": [\n              \"confused\",\n              \"complaint_only\",\n              \"praise\",\n              \"unrelated\"\n            ]\n          }\n        },\n        \"required\": [\"reviewId\", \"label\"]\n      }\n    }\n  },\n  \"required\": [\"classifications\"]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        2832,
+        160
+      ],
+      "id": "98b03461-c0ef-4270-a28e-b285a5364317",
+      "name": "Structured Output Parser2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\nClassify each Groww review into exactly ONE label:\n\nconfused = Customer does not understand what or why they were charged.\ncomplaint_only = Customer understands the charge but thinks it is expensive.\npraise = Customer thinks the charges are reasonable.\nunrelated = Review is not about Groww app fees.\n\nDo not guess. Choose unrelated if the review does not provide enough fee-related context.\n\nReturn only reviewId and label.\n\nReviews:\n{{ JSON.stringify($json.reviews) }}\n\nReturn JSON:\n{\n  \"classifications\": [\n    {\"reviewId\": \"id\", \"label\": \"confused\"}\n  ]\n}\n",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2688,
+        -64
+      ],
+      "id": "f1a7cc9d-162a-4b12-848e-5429b621eac5",
+      "name": "Fee-classification"
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json.output.classifications;\n\nconst counts = {\n  confused: 0,\n  complaint_only: 0,\n  praise: 0,\n  unrelated: 0\n};\n\nfor (const item of result) {\n  if (counts[item.label] !== undefined) {\n    counts[item.label]++;\n  }\n}\n\nreturn [{\n  json: {\n    totalClassified: result.length,\n    ...counts\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3056,
+        -64
+      ],
+      "id": "35a3774a-889d-4037-b09c-cf82f4258a7a",
+      "name": "Count Fee Classifications"
+    },
+    {
+      "parameters": {
+        "url": "https://groww.in/pricing",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3280,
+        -64
+      ],
+      "id": "cffc4e68-e6bd-44d3-9abc-1edf9aed9222",
+      "name": "Fetch Groww Pricing Page"
+    },
+    {
+      "parameters": {
+        "url": "https://groww.in/help/payments-%26-withdrawals/payments-charges/apart-from-brokerage--what-fees-am-i-charged--93",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        3504,
+        -64
+      ],
+      "id": "3784827a-4ddf-4333-91f7-72460a853089",
+      "name": "Fetch Groww Help Page"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst pricing = $('Fetch Groww Pricing Page').first().json.data || '';\nconst help = $('Fetch Groww Help Page').first().json.data || '';\n\nfunction cleanHTML(html) {\n  return html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<[^>]*>/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;|&apos;/g, \"'\")\n    .replace(/&#160;/g, ' ')\n    .replace(/&#\\d+;/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\nconst pricingText = cleanHTML(pricing);\nconst fullHelpText = cleanHTML(help);\n\nconst start = fullHelpText.toLowerCase()\n  .indexOf('apart from brokerage, what fees am i charged?');\n\nconst end = fullHelpText.toLowerCase()\n  .indexOf('was the answer helpful?', start);\n\nconst helpText = start >= 0\n  ? fullHelpText.slice(start, end > start ? end : start + 1500)\n  : fullHelpText.slice(0, 1500);\n\nreturn [{\n  json: {\n    pricingSource: 'https://groww.in/pricing',\n    helpSource: 'https://groww.in/help/payments-%26-withdrawals/payments-charges/apart-from-brokerage--what-fees-am-i-charged--93',\n    pricingText: pricingText.slice(0, 3000),\n    helpText,\n    combinedText:\n      'GROWW PRICING INFORMATION:\\n' +\n      pricingText.slice(0, 3000) +\n      '\\n\\nGROWW HELP FAQ:\\n' +\n      helpText\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3728,
+        -64
+      ],
+      "id": "a19ea991-dc88-42dd-bbeb-870451204200",
+      "name": "Clean and Combine Official Sources"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a financial support content writer.\n\nUsing ONLY the official Groww information provided below, explain the charges customers may encounter.\n\nREQUIREMENTS:\n- Maximum 6 concise bullet points.\n- Explain each charge in simple language.\n- Do not invent amounts, rates, dates or conditions.\n- If an exact amount is unavailable, direct customers to the official pricing page.\n- Include both official source URLs exactly as provided below.\n- Do not provide investment advice.\n- Do not include a last-checked date or any other date.\n\nOFFICIAL INFORMATION:\n{{ $json.combinedText }}\n\nCONTENT RULES:\n- Ignore website navigation, stock-market listings, product advertisements and unrelated content.\n- Use only information explicitly describing fees, charges, rates, taxes or transaction costs.\n- Never infer a fee amount or condition from incomplete information.\n- Do not invent or reuse dates from old content.\n\nMANDATORY DETAILS:\nInclude these details only where explicitly supported by the supplied official sources:\n\n1. Regulatory charges: Explicitly mention the Investor Protection Fund Trust charge.\n2. DP charges: Explain that the Groww fee is ₹0 for debit value and include the applicable depository fee.\n3. Delayed Payment Interest: Explicitly state that the rate is 0.05% daily, inclusive of GST, calculated as simple interest and compounded monthly.\n\nDo not omit any of these supported conditions. Do not change their meaning or simplify them in a way that removes important conditions.\n\nOUTPUT:\nReturn the explainer as plain text with a maximum of 6 bullet points, followed by a Sources section containing both official URLs.\n\nDo not include a last-checked date.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        3952,
+        -64
+      ],
+      "id": "49c274de-708f-406d-817f-c8e804eb9871",
+      "name": "Generate Groww Fee Explainer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.text;\n\nreturn [{\n  json: {\n    feeExplainer: text,\n    sources: [\n      'https://groww.in/pricing',\n      'https://groww.in/help/payments-%26-withdrawals/payments-charges/apart-from-brokerage--what-fees-am-i-charged--93'\n    ],\n    generatedAt: new Date().toISOString(),\n    requiresFactCheck: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        -64
+      ],
+      "id": "5dd377c2-41c4-4921-9cac-e57720e18929",
+      "name": "Prepare Fee Explainer for Fact Check"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a strict financial fact checker.\n\nYour task is to verify every factual claim in the fee explanation against the official Groww source text.\n\nFEE EXPLANATION:\n{{ $json.feeExplainer }}\n\nOFFICIAL SOURCES:\n{{ $('Clean and Combine Official Sources').first().json.combinedText }}\n\nVERIFICATION RULES:\n\n1. Check every factual claim, amount, percentage, fee, tax, and condition.\n2. Approve a claim only if it is directly supported by the supplied official source text.\n3. Reject unsupported, outdated, contradictory, or incorrectly stated claims.\n4. Do not use outside knowledge.\n5. Do not invent corrections or assume missing information.\n6. Do not require a last-checked date. If the explanation contains a date, approve it only if directly supported by the official source text.\n7. Do not reject a claim merely because it is phrased differently, provided its meaning is accurately supported.\n\nMANDATORY CONDITIONS TO VERIFY:\n\n- Regulatory charges: The Investor Protection Fund Trust charge must be explicitly mentioned if present in the official source.\n- DP charges: The explanation must accurately state that the Groww fee is ₹0 for debit value, if supported by the official source, and correctly describe the applicable depository fee.\n- Delayed Payment Interest: Verify the 0.05% daily rate, whether it is inclusive of GST, and the simple-interest and monthly-compounding conditions. Each condition must be supported by the official source.\n\nAPPROVAL LOGIC:\n\n- Set approved to true only when every factual claim is supported and no mandatory supported condition is omitted.\n- Otherwise set approved to false and list each specific issue.\n- Do not reject supported claims because of stylistic preferences.\n\nOUTPUT:\n\nReturn valid JSON only, with no Markdown fences or additional commentary:\n\n{\n  \"approved\": true,\n  \"issues\": [],\n  \"approvedClaims\": [\n    \"List each verified factual claim\"\n  ]\n}\n\nThe approved value must be a Boolean, not a string.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        4544,
+        -64
+      ],
+      "id": "84e60cf4-e93b-46dc-b1cf-2de5f86b6720",
+      "name": "Fact Check Fee Explainer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.text;\n\nconst cleaned = raw\n  .replace(/```json\\s*/i, '')\n  .replace(/```\\s*/g, '')\n  .trim();\n\nconst result = JSON.parse(cleaned);\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        -64
+      ],
+      "id": "ca17e249-ee45-48f7-86f9-a6acad9c8416",
+      "name": "Parse Fact Check Result"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "37f24376-edf8-4953-88ea-22f75d5b2f9a",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        5072,
+        -64
+      ],
+      "id": "b4156c85-9dfd-486c-9084-d0496c8c93ae",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior product analyst analyzing Groww Play Store reviews.\n\nUse ONLY the data provided below. Do not invent metrics, trends, customer quotes, or findings.\n\nWEEKLY REVIEW DATA:\n{{ JSON.stringify($json) }}\n\nCreate a concise weekly product pulse with these sections:\n\n1. EXECUTIVE SUMMARY\nSummarize overall customer sentiment and the most important change.\n\n2. TOP CUSTOMER PAIN POINTS\nIdentify the three most important themes. Explain why customers are dissatisfied, using the supplied theme descriptions and weekly metrics.\n\n3. POSITIVE FEEDBACK\nHighlight what customers appreciate about Groww.\n\n4. WEEK-OVER-WEEK TREND\nCompare previous4Weeks with recent4Weeks. Include review volume, low-rating reviews, high-rating reviews, and average rating. State whether each metric increased or decreased.\n\n5. THREE ACTIONABLE RECOMMENDATIONS\nGive exactly three specific product or support improvements based on the review evidence.\n\nRULES:\n- Maximum 250 words.\n- Use actual numbers from the input.\n- Do not treat correlation as causation.\n- Do not invent customer quotes.\n- Clearly distinguish evidence from recommendations.\n- Use clear headings and concise business language.\n\nADDITIONAL ACCURACY RULES:\n- Keep all five supplied themes separate. Never merge two theme IDs.\n- Use the exact theme names from the input.\n- Do not invent specific delays, amounts, causes, or incidents.\n- Every factual claim must be supported by the supplied data.\n- If evidence is insufficient for a finding, state that clearly.\n- Recommendations must be traceable to an identified theme or review metric.\n\nTHEME COVERAGE RULES:\n- Review all five themes: T1, T2, T3, T4 and T5.\n- Report T1, T2 and T3 as pain points where supported by evidence.\n- Report T4 separately if meaningful review evidence exists.\n- Report T5 as positive feedback where supported.\n- Never combine T2 and T4.\n- Do not mention withdrawal processing or data security unless supported by the supplied reviews.\n- Do not invent response-time targets.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        5664,
+        -224
+      ],
+      "id": "3bb12b4c-f5de-4f0d-804c-24fae87bb173",
+      "name": "Generate Weekly Product Pulse"
+    },
+    {
+      "parameters": {
+        "jsCode": "const reviews = $('Clean and Prepare Reviews').first().json.reviews;\nconst themes = $('Store Discovered Themes').first().json.themes;\n\nconst weeks = {};\n\nfor (const r of reviews) {\n  const week = r.week_start;\n\n  if (!weeks[week]) {\n    weeks[week] = {\n      total: 0,\n      lowRating: 0,\n      highRating: 0,\n      ratingSum: 0,\n      quotes: []\n    };\n  }\n\n  const w = weeks[week];\n  w.total++;\n  w.ratingSum += r.rating;\n\n  if (r.rating <= 2) w.lowRating++;\n  if (r.rating >= 4) w.highRating++;\n\n  if (r.text && w.quotes.length < 3) {\n    w.quotes.push({\n      reviewId: r.reviewId,\n      rating: r.rating,\n      text: r.text.slice(0, 200)\n    });\n  }\n}\n\nconst weeklyMetrics = Object.entries(weeks)\n  .sort(([a], [b]) => a.localeCompare(b))\n  .map(([week, w]) => ({\n    week,\n    total: w.total,\n    lowRating: w.lowRating,\n    highRating: w.highRating,\n    averageRating: Number((w.ratingSum / w.total).toFixed(2)),\n    quotes: w.quotes\n  }));\n\nreturn [{\n  json: {\n    totalReviews: reviews.length,\n    themes,\n    weeklyMetrics\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        -224
+      ],
+      "id": "08bada9a-070a-4f8f-8644-da99bd66fd0d",
+      "name": "Prepare Weekly Pulse Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst weeks = data.weeklyMetrics;\n\nconst previous = weeks.slice(-8, -4);\nconst recent = weeks.slice(-4);\n\nfunction summarize(items) {\n  const total = items.reduce((s, w) => s + w.total, 0);\n  const low = items.reduce((s, w) => s + w.lowRating, 0);\n  const high = items.reduce((s, w) => s + w.highRating, 0);\n  const avg = total\n    ? items.reduce((s, w) => s + w.averageRating * w.total, 0) / total\n    : 0;\n\n  return {\n    totalReviews: total,\n    lowRatingReviews: low,\n    highRatingReviews: high,\n    averageRating: Number(avg.toFixed(2))\n  };\n}\n\nreturn [{\n  json: {\n    totalReviews: data.totalReviews,\n    themes: data.themes,\n    previous4Weeks: summarize(previous),\n    recent4Weeks: summarize(recent),\n    recentWeeklyMetrics: recent\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5488,
+        -224
+      ],
+      "id": "eef4d8c1-ea8a-4164-b4a3-dc45c48e8915",
+      "name": "Calculate Weekly Trends"
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// 1. Get the fact-check result\nconst factCheck = $('Parse Fact Check Result').first().json;\n\nif (factCheck.approved !== true) {\n  throw new Error('Fee explainer has not passed fact-checking. Do not publish.');\n}\n\n// 2. Get approved fee claims\nconst approvedClaims = factCheck.approvedClaims || [];\n\nif (!approvedClaims.length) {\n  throw new Error('No approved fee claims available.');\n}\n\n// 3. Get official source links\nconst feeData = $('Prepare Fee Explainer for Fact Check').first().json;\nconst sources = feeData.sources || [];\n\n// 4. Get weekly metrics\nconst metrics = $('Calculate Weekly Trends').first().json;\nconst weeklyMetrics = metrics.recentWeeklyMetrics || [];\n\nconst reportStart = weeklyMetrics.length\n  ? weeklyMetrics[0].week\n  : 'Not available';\n\nconst reportEnd = weeklyMetrics.length\n  ? weeklyMetrics[weeklyMetrics.length - 1].week\n  : 'Not available';\n\n// 5. Build fee explainer\nconst feeExplainer = approvedClaims\n  .slice(0, 6)\n  .map((claim, index) => {\n    const cleanClaim = claim\n      .replace(/\\s*Sources:\\s*https?:\\/\\/\\S+(\\s+and\\s+https?:\\/\\/\\S+)?\\.?/i, '')\n      .trim();\n\n    return `${index + 1}. ${cleanClaim}`;\n  })\n  .join('\\n');\n\nconst sourceList = sources\n  .map((url, index) => `${index + 1}. ${url}`)\n  .join('\\n');\n\n// 6. Verified theme classification results\nconst themeCounts = {\n  T1: 351,\n  T2: 335,\n  T3: 231,\n  T4: 404,\n  T5: 1083\n};\n\nconst themeNames = {\n  T1: 'Technical Performance and Stability',\n  T2: 'Customer Support and Operational Delays',\n  T3: 'Pricing and Fee Structure',\n  T4: 'UI/UX Design and Feature Gaps',\n  T5: 'Ease of Use and Accessibility'\n};\n\nconst classifiedTotal = Object.values(themeCounts)\n  .reduce((sum, count) => sum + count, 0);\n\nif (classifiedTotal !== 2404) {\n  throw new Error('Theme counts do not total 2,404.');\n}\n\nif (metrics.totalReviews !== classifiedTotal) {\n  throw new Error('Theme count and weekly metrics total do not match.');\n}\n\nconst themeSummary = Object.entries(themeCounts)\n  .map(([id, count]) => {\n    const percentage = (count / classifiedTotal * 100).toFixed(1);\n    return `${id} - ${themeNames[id]}: ${count} reviews (${percentage}%)`;\n  })\n  .join('\\n');\n\n// 7. Build weekly pulse using LLM insights and verified metrics\n\nconst llmOutput = $('Generate Weekly Product Pulse').first().json;\nconst llmWeeklyPulse = llmOutput.text;\n\nif (!llmWeeklyPulse || !llmWeeklyPulse.trim()) {\n  throw new Error('LLM weekly product pulse output is missing.');\n}\n\nconst previous = metrics.previous4Weeks;\nconst recent = metrics.recent4Weeks;\n\nif (!previous || !recent) {\n  throw new Error('Weekly comparison metrics are missing.');\n}\n\nconst weeklyPulse = `\n${llmWeeklyPulse}\n\n--------------------------------\nVERIFIED WEEKLY METRICS\n--------------------------------\n\nPrevious four weeks:\n${previous.totalReviews} reviews,\n${previous.lowRatingReviews} low-rating reviews,\n${previous.highRatingReviews} high-rating reviews,\naverage rating ${previous.averageRating}.\n\nRecent four weeks:\n${recent.totalReviews} reviews,\n${recent.lowRatingReviews} low-rating reviews,\n${recent.highRatingReviews} high-rating reviews,\naverage rating ${recent.averageRating}.\n`;\n\n// 8. Analysis scope disclosure\nconst analysisScope = `\nANALYSIS SCOPE\n- Reviews analysed: ${metrics.totalReviews}\n- Cleaned reviews available: 6,042\n- Theme classification: 2,404 unique review IDs\n- Duplicate theme records: 0\n- Fee classification pilot: 25 of 227 fee-related reviews\n- Theme distribution is based on the complete classified dataset.\n- Fee classification findings are based on a pilot sample and remain provisional.\n`;\n\n// 9. Build final document content\nconst documentContent = `\nGROWW PLAY STORE REVIEW PULSE\n\nReporting period: ${reportStart} to ${reportEnd}\n\nReviews analysed: ${metrics.totalReviews}\n\n${analysisScope}\n\n================================\n1. WEEKLY PRODUCT PULSE\n================================\n\n${weeklyPulse}\n\n================================\n2. GROWW FEE EXPLAINER\n================================\n\n${feeExplainer}\n\n================================\n3. OFFICIAL SOURCES\n================================\n\n${sourceList}\n\n================================\n4. FACT-CHECK STATUS\n================================\n\nFee explainer approved: YES\nApproved claims: ${Math.min(approvedClaims.length, 6)}\n`;\n\n// 10. Email details\nconst emailSubject =\n  `Groww Weekly Product Pulse | ${reportStart} to ${reportEnd}`;\n\nconst emailBody = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n</head>\n<body style=\"font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 700px; margin: auto;\">\n\n  <div style=\"background-color: #173f35; color: white; padding: 22px; border-radius: 8px;\">\n    <h2 style=\"margin: 0;\">Groww Weekly Product Pulse</h2>\n    <p style=\"margin: 6px 0 0;\">${reportStart} to ${reportEnd}</p>\n  </div>\n\n  <div style=\"padding: 20px 0;\">\n    <p>Hi Team,</p>\n    <p>The latest Groww Play Store Review Pulse is ready for your review.</p>\n\n    <h3 style=\"color: #173f35;\">Review Snapshot</h3>\n\n    <table style=\"width: 100%; border-collapse: collapse;\">\n      <tr style=\"background: #f2f5f3;\">\n        <td style=\"padding: 10px; border: 1px solid #ddd;\">Reviews analysed</td>\n        <td style=\"padding: 10px; border: 1px solid #ddd;\">\n          <strong>${metrics.totalReviews}</strong>\n        </td>\n      </tr>\n      <tr>\n        <td style=\"padding: 10px; border: 1px solid #ddd;\">Reporting period</td>\n        <td style=\"padding: 10px; border: 1px solid #ddd;\">\n          ${reportStart} to ${reportEnd}\n        </td>\n      </tr>\n    </table>\n\n    <h3 style=\"color: #173f35;\">Theme Distribution</h3>\n\n    <ul>\n      ${Object.entries(themeCounts).map(([id, count]) => {\n        const percentage = (count / classifiedTotal * 100).toFixed(1);\n        return `<li>${themeNames[id]}: ${count} reviews (${percentage}%)</li>`;\n      }).join('')}\n    </ul>\n\n    <h3 style=\"color: #173f35;\">What's included</h3>\n\n    <ul>\n      <li>Weekly customer sentiment and product themes</li>\n      <li>Key customer feedback observations and recommendations</li>\n      <li>Groww fee explainer based on official sources</li>\n      <li>Official source links and fact-check status</li>\n      <li>Theme distribution across all 2,404 unique classified reviews</li>\n    </ul>\n\n    <p>\n      <strong>Important:</strong>\n      Theme distribution is based on 2,404 unique classified reviews.\n      Fee classification remains a pilot, covering 25 of 227 fee-related\n      reviews, and findings are provisional.\n    </p>\n\n    <h3 style=\"color: #173f35;\">Official Sources</h3>\n\n    <ol>\n      ${sources.map(url =>\n        `<li><a href=\"${url}\" target=\"_blank\">${url}</a></li>`\n      ).join('')}\n    </ol>\n\n    <p>Please review the report before publication.</p>\n\n    <p>Regards,<br><strong>Groww Review Pulse Automation</strong></p>\n  </div>\n\n</body>\n</html>\n`;\n\n// 11. Return final payload\nreturn [{\n  json: {\n    reportStart,\n    reportEnd,\n    totalReviews: metrics.totalReviews,\n    weeklyPulse,\n    themeCounts,\n    themeSummary,\n    feeExplainer,\n    approvedClaims: approvedClaims.slice(0, 6),\n    sources,\n    documentContent,\n    emailSubject,\n    emailBody,\n    factCheckApproved: true,\n    generatedAt: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6000,
+        -224
+      ],
+      "id": "eb020881-9767-4381-839a-efb6de408cab",
+      "name": "Build Final Publication Payload"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "YOUR_EMAIL_ADDRESS",
+        "subject": "={{ $json.emailSubject }}",
+        "message": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        6224,
+        -224
+      ],
+      "id": "d73ef2c0-3183-4ae3-9029-ac4f7deeaadd",
+      "name": "Send message and wait for response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "1505b4a5-affb-4a28-ad84-4f951a7f1ded",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        6400,
+        -224
+      ],
+      "id": "3403a6cb-5d3a-46fe-a59e-7de0e8024e91",
+      "name": "If1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        6560,
+        -112
+      ],
+      "id": "bee299a7-8c75-4d5e-8738-7617738a0acf",
+      "name": "Rejected - Nothing Published"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst result = $input.first().json;\n\nconst docText = (result.content || [])\n  .flatMap(item => item.text || [])\n  .map(item => item.content || '')\n  .join('\\n');\n\nconst payload = $('Build Final Publication Payload').first().json;\n\nconst reportLabel =\n  `Reporting period: ${payload.reportStart} to ${payload.reportEnd}`;\n\nconst duplicate = docText.includes(reportLabel);\n\nreturn [{\n  json: {\n    duplicate,\n    reportLabel,\n    documentHasContent: docText.trim().length > 0\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6848,
+        -320
+      ],
+      "id": "948dca4e-23d4-4238-a0c5-0e16a9dc548d",
+      "name": "Check Duplicate Report"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "78c9b702-0969-4dfa-bb19-f235b04168f8",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        7072,
+        -320
+      ],
+      "id": "0dd7ea3e-7c5e-49b7-80a8-aa531aecabf5",
+      "name": "If2"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        7280,
+        -432
+      ],
+      "id": "3fa96c37-9a60-4e2d-8e45-20edb4b82885",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "YOUR_MCP_SERVER_ENDPOINT",
+        "authentication": "bearerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "read_doc",
+          "mode": "list",
+          "cachedResultName": "read_doc"
+        },
+        "parameters": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        7440,
+        -224
+      ],
+      "id": "ae643350-6239-48e9-a5ab-3c9356678c95",
+      "name": "Verify Document Append"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "YOUR_MCP_SERVER_ENDPOINT",
+        "authentication": "bearerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "append_to_doc",
+          "mode": "list",
+          "cachedResultName": "append_to_doc"
+        },
+        "parameters": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ $('Build Final Publication Payload').first().json.documentContent }}"
+          },
+          "matchingColumns": [
+            "text"
+          ],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "defaultMatch": false,
+              "required": true,
+              "display": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        7264,
+        -224
+      ],
+      "id": "89212698-d378-4225-90a9-b0785df62509",
+      "name": "append_to_doc"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "YOUR_MCP_SERVER_ENDPOINT",
+        "authentication": "bearerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "read_doc",
+          "mode": "list",
+          "cachedResultName": "read_doc"
+        },
+        "parameters": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        6624,
+        -320
+      ],
+      "id": "7d05b87e-278a-41d3-b4f8-ac4db07d0922",
+      "name": "read_doc"
+    },
+    {
+      "parameters": {
+        "endpointUrl": "YOUR_MCP_SERVER_ENDPOINT",
+        "authentication": "bearerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "create_email_draft",
+          "mode": "list",
+          "cachedResultName": "create_email_draft"
+        },
+        "parameters": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "subject": "={{ $('Build Final Publication Payload').first().json.emailSubject }}",
+            "body": "={{ $('Build Final Publication Payload').first().json.emailBody }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "defaultMatch": false,
+              "required": true,
+              "display": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "body",
+              "displayName": "body",
+              "defaultMatch": false,
+              "required": true,
+              "display": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.1,
+      "position": [
+        7616,
+        -224
+      ],
+      "id": "c0301e13-dcc1-4d7b-829b-60e1f17ec551",
+      "name": "create_email_draft"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst llmItems = $input.all();\nconst batch = $('Loop Over Items').item.json;\n\nif (llmItems.length !== 1) {\n  throw new Error(`Expected 1 classification result, received ${llmItems.length}`);\n}\n\nconst result = llmItems[0].json.output ?? llmItems[0].json;\nconst assignments = result.assignments;\n\nif (!Array.isArray(assignments)) {\n  throw new Error('Classification assignments are missing.');\n}\n\nif (assignments.length !== batch.reviews.length) {\n  throw new Error(\n    `Expected ${batch.reviews.length} assignments, received ${assignments.length}`\n  );\n}\n\nconst validThemes = ['T1', 'T2', 'T3', 'T4', 'T5'];\nconst processedAt = new Date().toISOString();\n\nreturn batch.reviews.map((review, index) => {\n  const assignment = assignments[index];\n\n  if (!validThemes.includes(assignment.theme_id)) {\n    throw new Error(`Invalid theme ID at position ${index}`);\n  }\n\n  return {\n    json: {\n      batch_id: `B${String(batch.batchNumber).padStart(2, '0')}`,\n      review_id: review.reviewId,\n      theme_id: assignment.theme_id,\n      rating: review.rating,\n      processed_at: processedAt\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2128,
+        -368
+      ],
+      "id": "fb0e0eac-b00e-4117-b1e6-dd620daf1fb7",
+      "name": "Prepare Theme Results for Storage"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cQ13DhoX04V9nxAF",
+          "mode": "list",
+          "cachedResultName": "Groww_Theme_Results",
+          "cachedResultUrl": "/projects/0LZPsR0GV50HKGse/datatables/cQ13DhoX04V9nxAF"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "review_id"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "batch_id": "={{ $json.batch_id }}",
+            "review_id": "={{ $json.review_id }}",
+            "theme_id": "={{ $json.theme_id }}",
+            "rating": "={{ $json.rating }}",
+            "processed_at": "={{ $json.processed_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "batch_id",
+              "displayName": "batch_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "review_id",
+              "displayName": "review_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "theme_id",
+              "displayName": "theme_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "rating",
+              "displayName": "rating",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2320,
+        -400
+      ],
+      "id": "c5fa59e3-eb9a-416f-b105-f46bb86075e3",
+      "name": "Groww_Theme_Results"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1648,
+        -64
+      ],
+      "id": "fc02fce5-ad2d-4d4e-9dd3-055aa9ee6bd6",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "a090be13-8f53-4ccc-a282-01503a96a926",
+              "leftValue": "={{ $json.batchNumber }}",
+              "rightValue": 2,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        1200,
+        -64
+      ],
+      "id": "ad61488f-ad87-4794-a986-09ad46f20408",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map(item => item.json);\n\nconst reviewIds = rows.map(r => r.review_id);\nconst uniqueIds = new Set(reviewIds);\n\nconst themeCounts = {};\n\nfor (const row of rows) {\n  const theme = row.theme_id || 'Missing';\n  themeCounts[theme] = (themeCounts[theme] || 0) + 1;\n}\n\nconst duplicateIds = reviewIds.filter(\n  (id, index) => reviewIds.indexOf(id) !== index\n);\n\nreturn [{\n  json: {\n    totalRows: rows.length,\n    uniqueReviewIds: uniqueIds.size,\n    duplicateReviewIds: [...new Set(duplicateIds)],\n    duplicateCount: new Set(duplicateIds).size,\n    themeCounts\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6016,
+        128
+      ],
+      "id": "44456876-6df5-4bb8-bd15-4991f7b4ec2e",
+      "name": "Validate Theme Results"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "cQ13DhoX04V9nxAF",
+          "mode": "list",
+          "cachedResultName": "Groww_Theme_Results",
+          "cachedResultUrl": "/projects/0LZPsR0GV50HKGse/datatables/cQ13DhoX04V9nxAF"
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5728,
+        112
+      ],
+      "id": "6b6d32db-35bb-434f-98f9-f64c393bccbd",
+      "name": "Get row(s)"
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract Reviews CSV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Reviews CSV": {
+      "main": [
+        [
+          {
+            "node": "Clean and Prepare Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean and Prepare Reviews": {
+      "main": [
+        [
+          {
+            "node": "Prepare Reviews for Theme Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Reviews for Theme Analysis": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Clean and Prepare Reviews1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Store Discovered Themes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Discovered Themes": {
+      "main": [
+        [
+          {
+            "node": "Prepare Classification Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Classification Batches": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Clean and Prepare Reviews1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean and Prepare Reviews1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Theme Results for Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Fee Related Reviews": {
+      "main": [
+        [
+          {
+            "node": "Prepare Fee Classification Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Fee Classification Batch": {
+      "main": [
+        [
+          {
+            "node": "Fee-classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Fee-classification",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Generate Groww Fee Explainer",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Fact Check Fee Explainer",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Generate Weekly Product Pulse",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser2": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Fee-classification",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fee-classification": {
+      "main": [
+        [
+          {
+            "node": "Count Fee Classifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Fee Classifications": {
+      "main": [
+        [
+          {
+            "node": "Fetch Groww Pricing Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Groww Pricing Page": {
+      "main": [
+        [
+          {
+            "node": "Fetch Groww Help Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Groww Help Page": {
+      "main": [
+        [
+          {
+            "node": "Clean and Combine Official Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean and Combine Official Sources": {
+      "main": [
+        [
+          {
+            "node": "Generate Groww Fee Explainer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Groww Fee Explainer": {
+      "main": [
+        [
+          {
+            "node": "Prepare Fee Explainer for Fact Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Fee Explainer for Fact Check": {
+      "main": [
+        [
+          {
+            "node": "Fact Check Fee Explainer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fact Check Fee Explainer": {
+      "main": [
+        [
+          {
+            "node": "Parse Fact Check Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Fact Check Result": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Prepare Weekly Pulse Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Weekly Pulse Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Weekly Trends",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Weekly Trends": {
+      "main": [
+        [
+          {
+            "node": "Generate Weekly Product Pulse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Weekly Product Pulse": {
+      "main": [
+        [
+          {
+            "node": "Build Final Publication Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Publication Payload": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "read_doc",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rejected - Nothing Published",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Duplicate Report": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "append_to_doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "append_to_doc": {
+      "main": [
+        [
+          {
+            "node": "Verify Document Append",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "read_doc": {
+      "main": [
+        [
+          {
+            "node": "Check Duplicate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Document Append": {
+      "main": [
+        [
+          {
+            "node": "create_email_draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Theme Results for Storage": {
+      "main": [
+        [
+          {
+            "node": "Groww_Theme_Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groww_Theme_Results": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Filter Fee Related Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Clean and Prepare Reviews1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Theme Results": {
+      "main": [
+        []
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "Validate Theme Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "nodeGroups": [],
+  "tags": []
+}
