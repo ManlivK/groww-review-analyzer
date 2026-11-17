@@ -187,13 +187,13 @@ AI-generated classifications and recommendations may require human review. Fee i
 ## Workflow Screenshots
 
 ### 1. Complete n8n Workflow
-![Workflow Overview](screenshots/workflow-overview.png.)
+![Workflow Overview](screenshots/workflow-overview.png.png)
 
 ### 2. Review Processing and AI Classification
 ![Review Processing](screenshots/review-processing-classification.png.png)
 
 ### 3. Reporting and Fact-Checking
-![Reporting Workflow](screenshots/reporting-fact-checking-and-mcp.png)
+![Reporting Workflow](screenshots/reporting-fact-checking-and-mcp.png.png)
 
 ### 4. MCP Server Architecture
-![MCP Server](screenshots/mcp-server-architecture.png)
+![MCP Server](screenshots/mcp-server-architecture.png.png)
