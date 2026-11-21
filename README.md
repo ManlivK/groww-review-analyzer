@@ -258,7 +258,8 @@ The current analysis covers the reporting period **19 October 2026 – 9 Novembe
 
 ## 🖥️ Dashboard Preview
 
-screenshots/Dashboard.png
+### Overview
+![Dashboard Overview](screenshots/Dashboard.png.png)
 
 The dashboard contains six sections:
 
