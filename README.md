@@ -258,9 +258,7 @@ The current analysis covers the reporting period **19 October 2026 – 9 Novembe
 
 ## 🖥️ Dashboard Preview
 
-Explore the deployed dashboard:
-
-**[Groww Review Analyzer – Live Dashboard](https://groww-review-analyzer-yvf7rdbgrwqv5dx8xkccjs.streamlit.app/)**
+screenshots/Dashboard.png
 
 The dashboard contains six sections:
 
@@ -438,12 +436,6 @@ Through this project, I explored and implemented:
 
 - [Groww Pricing](https://groww.in/pricing)
 - [Groww Help Centre – Additional Charges](https://groww.in/help/payments-%26-withdrawals/payments-charges/apart-from-brokerage--what-fees-am-i-charged--93)
-
-## 👩‍💻 Author
-
-Built as an independent portfolio project to explore the intersection of **AI, workflow automation, product analytics and data visualisation**.
-
-**GitHub:** [ManlivK](https://github.com/ManlivK)
 
 ---
 
