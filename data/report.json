@@ -1,0 +1,411 @@
+{
+  "meta": {
+    "title": "Groww Review Analyzer",
+    "subtitle": "Play Store Review Analytics",
+    "context": "Independent product analytics case study",
+    "is_sample": false,
+    "sample_label": "Real execution data",
+    "sample_note": "Based on existing n8n outputs. Weekly series spans 17 Aug–9 Nov 2026; four-week comparison spans 19 Oct–9 Nov 2026. Fee classification is a 25-review pilot from 227 fee-related reviews."
+  },
+  "overview": {
+    "kpis": [
+      {
+        "label": "Total reviews analysed",
+        "value": "2,404",
+        "delta": "2,404 unique classified review IDs",
+        "tone": "neutral"
+      },
+      {
+        "label": "Recent 4-week average rating",
+        "value": "3.42 / 5",
+        "delta": "Recent 4-week average; previous 4 weeks: 3.51",
+        "tone": "negative"
+      },
+      {
+        "label": "Discovered themes",
+        "value": "5",
+        "delta": "T1–T5",
+        "tone": "neutral"
+      },
+      {
+        "label": "Fee analysis pilot",
+        "value": "25",
+        "delta": "Of 227 fee-related reviews; provisional",
+        "tone": "neutral"
+      }
+    ],
+    "weekly_rating_trend": [
+      {
+        "week": "2026-08-17",
+        "rating": 3.44
+      },
+      {
+        "week": "2026-08-24",
+        "rating": 3.58
+      },
+      {
+        "week": "2026-08-31",
+        "rating": 3.55
+      },
+      {
+        "week": "2026-09-07",
+        "rating": 3.37
+      },
+      {
+        "week": "2026-09-14",
+        "rating": 3.0
+      },
+      {
+        "week": "2026-09-21",
+        "rating": 3.4
+      },
+      {
+        "week": "2026-09-28",
+        "rating": 3.69
+      },
+      {
+        "week": "2026-10-05",
+        "rating": 3.45
+      },
+      {
+        "week": "2026-10-12",
+        "rating": 3.5
+      },
+      {
+        "week": "2026-10-19",
+        "rating": 3.23
+      },
+      {
+        "week": "2026-10-26",
+        "rating": 3.5
+      },
+      {
+        "week": "2026-11-02",
+        "rating": 3.31
+      },
+      {
+        "week": "2026-11-09",
+        "rating": 3.79
+      }
+    ],
+    "feedback_distribution": [],
+    "opportunities": [
+      {
+        "title": "Resolve charting bugs",
+        "detail": "The weekly pulse identifies TradingView chart rendering issues and technical instability.",
+        "impact": "High"
+      },
+      {
+        "title": "Reduce support latency",
+        "detail": "Reviews describe unresponsive support and delays in withdrawals and Aadhaar data processing.",
+        "impact": "High"
+      },
+      {
+        "title": "Review brokerage concerns",
+        "detail": "Users express dissatisfaction with brokerage costs and their effect on profitability.",
+        "impact": "Medium"
+      }
+    ]
+  },
+  "trends": {
+    "weekly_volume": [
+      {
+        "week": "2026-08-17",
+        "reviews": 91
+      },
+      {
+        "week": "2026-08-24",
+        "reviews": 200
+      },
+      {
+        "week": "2026-08-31",
+        "reviews": 200
+      },
+      {
+        "week": "2026-09-07",
+        "reviews": 200
+      },
+      {
+        "week": "2026-09-14",
+        "reviews": 200
+      },
+      {
+        "week": "2026-09-21",
+        "reviews": 200
+      },
+      {
+        "week": "2026-09-28",
+        "reviews": 191
+      },
+      {
+        "week": "2026-10-05",
+        "reviews": 200
+      },
+      {
+        "week": "2026-10-12",
+        "reviews": 200
+      },
+      {
+        "week": "2026-10-19",
+        "reviews": 198
+      },
+      {
+        "week": "2026-10-26",
+        "reviews": 200
+      },
+      {
+        "week": "2026-11-02",
+        "reviews": 200
+      },
+      {
+        "week": "2026-11-09",
+        "reviews": 124
+      }
+    ],
+    "rating_trend": [
+      {
+        "week": "2026-08-17",
+        "rating": 3.44
+      },
+      {
+        "week": "2026-08-24",
+        "rating": 3.58
+      },
+      {
+        "week": "2026-08-31",
+        "rating": 3.55
+      },
+      {
+        "week": "2026-09-07",
+        "rating": 3.37
+      },
+      {
+        "week": "2026-09-14",
+        "rating": 3.0
+      },
+      {
+        "week": "2026-09-21",
+        "rating": 3.4
+      },
+      {
+        "week": "2026-09-28",
+        "rating": 3.69
+      },
+      {
+        "week": "2026-10-05",
+        "rating": 3.45
+      },
+      {
+        "week": "2026-10-12",
+        "rating": 3.5
+      },
+      {
+        "week": "2026-10-19",
+        "rating": 3.23
+      },
+      {
+        "week": "2026-10-26",
+        "rating": 3.5
+      },
+      {
+        "week": "2026-11-02",
+        "rating": 3.31
+      },
+      {
+        "week": "2026-11-09",
+        "rating": 3.79
+      }
+    ],
+    "rating_split": [
+      {
+        "week": "2026-08-17",
+        "low": 34,
+        "high": 56
+      },
+      {
+        "week": "2026-08-24",
+        "low": 60,
+        "high": 125
+      },
+      {
+        "week": "2026-08-31",
+        "low": 64,
+        "high": 122
+      },
+      {
+        "week": "2026-09-07",
+        "low": 72,
+        "high": 114
+      },
+      {
+        "week": "2026-09-14",
+        "low": 90,
+        "high": 96
+      },
+      {
+        "week": "2026-09-21",
+        "low": 72,
+        "high": 119
+      },
+      {
+        "week": "2026-09-28",
+        "low": 55,
+        "high": 128
+      },
+      {
+        "week": "2026-10-05",
+        "low": 72,
+        "high": 123
+      },
+      {
+        "week": "2026-10-12",
+        "low": 65,
+        "high": 118
+      },
+      {
+        "week": "2026-10-19",
+        "low": 82,
+        "high": 107
+      },
+      {
+        "week": "2026-10-26",
+        "low": 66,
+        "high": 121
+      },
+      {
+        "week": "2026-11-02",
+        "low": 76,
+        "high": 111
+      },
+      {
+        "week": "2026-11-09",
+        "low": 30,
+        "high": 85
+      }
+    ]
+  },
+  "themes": [
+    {
+      "id": "T1",
+      "name": "Technical Performance and Stability",
+      "count": 351,
+      "percentage": 14.6,
+      "description": "Technical glitches, crashes, server downtime, lagging and freezing charts."
+    },
+    {
+      "id": "T2",
+      "name": "Customer Support and Operational Delays",
+      "count": 335,
+      "percentage": 13.9,
+      "description": "Unresponsive support, KYC delays, refunds and delays in financial operations."
+    },
+    {
+      "id": "T3",
+      "name": "Pricing and Fee Structure",
+      "count": 231,
+      "percentage": 9.6,
+      "description": "Concerns about brokerage, DP charges and perceived hidden costs."
+    },
+    {
+      "id": "T4",
+      "name": "UI/UX Design and Feature Gaps",
+      "count": 404,
+      "percentage": 16.8,
+      "description": "Interface layout, update-related frustrations and requests for advanced tools and features."
+    },
+    {
+      "id": "T5",
+      "name": "Ease of Use and Accessibility",
+      "count": 1083,
+      "percentage": 45.0,
+      "description": "Positive feedback on a simple, intuitive and user-friendly interface."
+    }
+  ],
+  "pain_points": [
+    {
+      "category": "Technical Performance and Stability",
+      "mentions": 351,
+      "severity": "Not assessed",
+      "summary": "Theme T1: technical glitches, crashes, lagging and chart issues."
+    },
+    {
+      "category": "Customer Support and Operational Delays",
+      "mentions": 335,
+      "severity": "Not assessed",
+      "summary": "Theme T2: unresponsive support and operational delays."
+    },
+    {
+      "category": "Pricing and Fee Structure",
+      "mentions": 231,
+      "severity": "Not assessed",
+      "summary": "Theme T3: brokerage, DP charges and perceived hidden costs."
+    },
+    {
+      "category": "UI/UX Design and Feature Gaps",
+      "mentions": 404,
+      "severity": "Not assessed",
+      "summary": "Theme T4: interface feedback and requests for missing or advanced features."
+    }
+  ],
+  "recommendations": [
+    {
+      "problem": "Charting and technical stability issues",
+      "evidence": "The weekly pulse highlights TradingView chart rendering issues and general instability.",
+      "improvement": "Prioritise chart-rendering fixes and validate technical indicators and real-time chart behaviour.",
+      "priority": "High"
+    },
+    {
+      "problem": "Slow support responses and operational delays",
+      "evidence": "Reviews describe unresponsive support, including a complaint reporting no response after four days.",
+      "improvement": "Reduce support latency and improve communication on withdrawal and KYC-related cases.",
+      "priority": "High"
+    },
+    {
+      "problem": "Brokerage cost concerns",
+      "evidence": "The weekly pulse reports complaints that brokerage fees affect user profitability.",
+      "improvement": "Evaluate pricing communication and the feasibility of competitive pricing or monthly packs.",
+      "priority": "Medium"
+    }
+  ],
+  "fee_analysis": {
+    "pilot_sample_size": 25,
+    "fee_related_review_count": 227,
+    "classification": [],
+    "fact_check": [
+      {
+        "item": "Fee explainer claims checked against official sources",
+        "status": "Approved"
+      },
+      {
+        "item": "Approved claims",
+        "status": "6 claims approved"
+      }
+    ],
+    "sources": [
+      {
+        "label": "Groww official pricing page",
+        "url": "https://groww.in/pricing"
+      },
+      {
+        "label": "Groww official charges help article",
+        "url": "https://groww.in/help/payments-%26-withdrawals/payments-charges/apart-from-brokerage--what-fees-am-i-charged--93"
+      }
+    ]
+  },
+  "report_comparison": {
+    "report_start": "2026-10-19",
+    "report_end": "2026-11-09",
+    "previous_four_weeks": {
+      "reviews": 791,
+      "low_rating": 264,
+      "high_rating": 488,
+      "average_rating": 3.51
+    },
+    "recent_four_weeks": {
+      "reviews": 722,
+      "low_rating": 254,
+      "high_rating": 424,
+      "average_rating": 3.42
+    }
+  }
+}
